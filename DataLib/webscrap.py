@@ -60,14 +60,14 @@ def collect_ratios(name):
    bs = BeautifulSoup(html.read(), features = "html.parser")
    #count = 0; 
    for f in bs.find("table",{"class":"table4", "width":"744", "cellspacing":"0", "cellpadding":"0", "bgcolor":"#ffffff"}).find_next_sibling("table").findChildren("td", {"class": ["det", "detb"]}):
-      data = f.get_text() 
+      data = f.get_text()
       if data.startswith('Mar ') and data[-2:].isnumeric():
          '''Capture year as column headers '''  
          years.append('20' + str(data.split()[-1]))
 
-      elif data.lstrip('-').replace('.','').isdigit():
+      elif data.lstrip('-').replace('.','').replace(',','').isdigit():
          '''Check if it's a numeric data, it has to be a value'''  
-         ratio[ratio_key] = (float(data))
+         ratio[ratio_key] = data.replace(',','')
          if not report.has_key(years[data_index]):
             report[years[data_index]] = {}
          report[years[data_index]].update(ratio)
@@ -78,6 +78,19 @@ def collect_ratios(name):
          '''ignore empty fields including sub-section headers''' 
          continue
 
+      elif data == '-':
+         '''unavailable data mentioned as - '''
+         ratio[ratio_key] = (float(0))
+         if not report.has_key(years[data_index]):
+            report[years[data_index]] = {}
+         report[years[data_index]].update(ratio)
+         #print ratio
+         #print report[years[data_index]]
+         ratio = {}
+         data_index += 1
+
+
+
       elif data[0].isalpha() and len(data) > 5:
          '''Capture field names''' 
          ratio_key = copy.deepcopy(str(data))
@@ -86,10 +99,6 @@ def collect_ratios(name):
       else:
          continue
 
-      #count += 1;
-      #if count == 100: break
-      #print report
-   #print report   
    return report
 
 def print_annual_ratios(report):
@@ -100,16 +109,11 @@ def print_annual_ratios(report):
     years_p = [item.rjust(16,' ') for item in years ]
     years_str = "\t"*4 + "".join(years_p)
     print years_str
-    #print report
     for k in report[years[0]].keys():
         val = k + "\t"
         for y in years:
-            #print "[%s][%s]" % ( y, k)
             val += str(report.get(y).get(k,'***')) + "\t\t"
-        print val        
-
-        
-
+        print val
 
 
 def fetch_record(name):
@@ -129,8 +133,6 @@ def main():
      fetch_record(name.lower())
      report = collect_ratios(name.lower())
      print_annual_ratios(report)
-
-
 
 if __name__ == "__main__" :
   main()
