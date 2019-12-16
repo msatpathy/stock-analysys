@@ -10,6 +10,7 @@ import pickle
 from datetime import datetime
 
 DATA_DIR = "DataLib/"
+
 '''Fetch div data from the web(moneycontrol)'''
 def get_dividend_history(name):
     div_records = []
@@ -38,6 +39,35 @@ def get_dividend_history(name):
             div_records.append(d)
             values = []
     return div_records
+
+
+'''Fetch bonus data from the web(moneycontrol)'''
+def get_bonus_history(name):
+    bonus_records = []
+    keys = ['announce_date', 'ratio', 'record', 'ex-bonus_date']
+    values = []
+    for item in urldata:
+        for n in item['name']:
+          if n == name:
+            url = item['bonus_history']
+            break
+        if url != "":
+           break
+
+    if url != '':
+        html = urlopen(url)
+    else:
+        print "url not found(bonus)!!!"
+        sys.exit()
+    
+    bs = BeautifulSoup(html.read(), features="html.parser")
+    for f in  bs.find("table", {'class':"mctable1 MT20"}).findChildren("td"):
+        values.append(f.get_text())
+        if len(values) == len(keys):
+            d = dict(zip(keys,values))
+            bonus_records.append(d)
+            values = []
+    return bonus_records
 
          
 '''consolidate div data per year basis(one entry per year)'''
@@ -74,7 +104,7 @@ def collect_ratios(name):
         for id in item['name']:
             if id == name:
               url = item['ratios']
-              print url
+              #print url
               break
         if url != '':
           break
@@ -127,6 +157,7 @@ def collect_ratios(name):
          continue
    save_to_disk('RATIOS', report, name)
    return report
+
 '''print financial ratios to console'''
 def print_annual_ratios(report):
     #import pdb
@@ -162,30 +193,47 @@ def dump_dividend_history(div_data, dump_name):
       l = lines.split("\n")
       l.sort(reverse = True)
       lines_sorted =  "\n".join(l)
-      print lines_sorted
+      #print lines_sorted
       f.write(lines_sorted)
 
-'''Fetch corporate actions history (splits, dividends, bonuses etc.)'''
-def fetch_corp_actions(com_name):
-    div_keys = ['announce', 'effective', 'type', 'percentage', 'remarks']
-    div_values  = []
-    for item in urldata:
-      for n in item['name']:
-        if n == name:
-          url = item['div_history']
-          break
-        if url != "":
-          break
+'''Fetch corporate actions history (SPLIT, DIVIDEND, BONUS etc.)'''
+def fetch_corp_actions(comp_name):
+    all_events = []
+    #event = { }    { 'event_type': '', 'date' : '' ,'value': '' }
+    
+    div_history = get_dividend_history(comp_name)
+    events = filter_corp_actions_data(div_history, 'DIVIDEND')
+    all_events.extend(events)
+    #print all_events
 
-    if url != '':
-      html = urlopen(url)
-    else:
-      print "url not found(dividend)!!!"
-      sys.exit()
+    bonus_history = get_bonus_history(comp_name)
+    events = filter_corp_actions_data(bonus_history, 'BONUS')
+    all_events.extend(events)
+    print all_events
 
-    bs = BeautifulSoup(html.read(), features="html.parser")
-    for f in  bs.find("table", {'class':"mctable1"}).findChildren("td"):
-      values.append(f.get_text())
+
+
+'''filter events to only relevant fields, remove the rest'''
+def filter_corp_actions_data(event_list, event_type):
+    filtered_list = []
+    if event_type == 'DIVIDEND':
+       for item in event_list:
+          event = {}
+          event['event_type'] = 'DIVIDEND'
+          event['date'] = item['effective']
+          event['value'] = item['percentage']
+          filtered_list.append(event)
+    
+    if event_type == 'BONUS':
+       for item in event_list:
+          event = {}
+          event['event_type'] = 'BONUS'
+          event['date'] = item['record']
+          event['value'] = item['ratio']
+          filtered_list.append(event)
+    return filtered_list
+
+        
 
 '''Save data to disk'''
 ''' TYPE = ('DIV', 'RATIOS', 'CALENDAR') '''
@@ -240,13 +288,13 @@ def main():
 
   if name != '':
      dividend = fetch_div_record(name.lower())
-     print dividend
+     #print dividend
      dump_dividend_history(dividend, name.lower())
 
      report = collect_ratios(name.lower())
-     print_annual_ratios(report)
+     #print_annual_ratios(report)
      
-
+     fetch_corp_actions(name.lower())
 if __name__ == "__main__" :
   main()
   
