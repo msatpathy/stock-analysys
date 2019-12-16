@@ -24,28 +24,38 @@ def csv_linechart(x_axis, y_axis, csv = ''):
 
 
 '''Filter required columns from raw data '''
-os.system("$(pwd)/process.sh %s > %s" % (f_in, f_out))
+if os.path.isfile(DATA_DIR + f_in):
+  os.system("$(pwd)/process.sh %s > %s" % (f_in, f_out))
+elif os.path.isfile(DATA_DIR + f_in + ".data"):
+  pass
+else:
+  sys.exit()
+  
 all_items = []
 yearly_pay =  [[-1, 0.0]]
 years = []
 pays = []
+
 ''' Organise data from file into list year:dividend % '''
 with open(f_out) as datafile:
    lines = datafile.readlines()
    for line in lines:
-     x,y = line.split()
+     if len(line.split()) > 1:
+       x,y = line.split()
+     else:
+       continue
      all_items.append([int(x),float(y)])
      all_items.sort()
-
+     #print all_items
 ''' Consolidate multiple dividend payouts during same year into single yearly payout '''
 for item in all_items:
   if item[0] != yearly_pay[-1][0]:
      yearly_pay.append(item)
   else:
      yearly_pay[-1][1] += item[1]
-
 ''' incremental chronological order '''
-yearly_pay = yearly_pay[1:-1]
+yearly_pay = yearly_pay[1:]
+
 
 ''' check discontinuation '''
 discont = []
@@ -71,16 +81,16 @@ growth_pattern = []
 last = 0.0
 cut_count = 0
 for item in yearly_pay:
-  growth_pattern.append(item[1] - last)
+  growth_pattern.append((item[1] - last)/item[1] * 100)
   ''' Count cut in div payout '''
   if item[1] < last:
     cut_count += 1
 
   last = item[1]
-
 ''' Calculate CAGR growth rate at different intervals '''
 CAGR_ALL = ((float(yearly_pay[-1][1]/yearly_pay[0][1])) ** (1/float(len(yearly_pay))) - 1 ) * 100
-CAGR_10 = ((float(yearly_pay[-1][1]/yearly_pay[-11][1])) ** (1/float(10)) - 1 ) * 100
+CAGR_10 = 0.0
+if len(yearly_pay) > 10: CAGR_10 = ((float(yearly_pay[-1][1]/yearly_pay[-11][1])) ** (1/float(10)) - 1 ) * 100
 CAGR_5 = ((float(yearly_pay[-1][1]/yearly_pay[-6][1])) ** (1/float(5)) - 1 ) * 100
 CAGR_3 = ((float(yearly_pay[-1][1]/yearly_pay[-4][1])) ** (1/float(3)) - 1 ) * 100
 CAGR_3S = []
@@ -176,3 +186,11 @@ if '--dump' in opts:
 
 
 
+'''remove input file to ensure removal of stale data'''
+if os.path.isfile(DATA_DIR + f_in):
+    os.rename(DATA_DIR + f_in, DATA_DIR + "~" + f_in + ".bak")
+
+if os.path.isfile( f_out):
+    os.rename(f_out, f_out + ".bak" )
+    
+    
