@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-#usage ./webscrap --name (userfriendly name or code) 
+# usage ./webscrap --name (userfriendly name or code for company) [--verbose / -v ]  
+# Ex: ./webscrap.py --name  nationalum -v 
 
 import sys,os
 from urllib import urlopen
@@ -10,7 +11,16 @@ import pickle
 from datetime import datetime
 from tabulate import tabulate
 
+PRINT = False 
+
 DATA_DIR = "DataLib/"
+
+
+'''print to console if enabled in command line(-v/--verbose)'''
+def console_print(text):
+    global PRINT
+    if PRINT == True:
+      print text
 
 '''Fetch div data from the web(moneycontrol)'''
 def get_dividend_history(name):
@@ -97,9 +107,6 @@ def get_split_history(name):
             split_records.append(d)
             values = []
     return split_records
-
-
-
          
 '''consolidate div data per year basis(one entry per year)'''
 def calculate_annual_dividend(hist_records):
@@ -191,24 +198,18 @@ def collect_ratios(name):
 
 '''print financial ratios to console'''
 def print_annual_ratios(report):
-    #import pdb
-    #pdb.set_trace()
+    table = []
     years = report.keys()
     years.sort(reverse = True)
-    years_p = [item.rjust(16,' ') for item in years ]
-    #years_str = "\t"*4 + "".join(years_p)
-    years_p.insert(0, 'Ratios\t\t\t')
-    format_string = len(years_p)*'{:<24}'
-    print format_string.format(*years_p)
 
-    all_keys = sorted(report[years[0]].keys())
     for k in sorted(report[years[0]].keys()):
         val = []
         val.append(k)
         for y in years:
             val.append(str(report.get(y).get(k,'***'))) 
-        val =  [str(i).rjust(24) for i in val ]
-        print format_string.format(*val)
+        table.append(val)
+    console_print(tabulate("",["\t\t\t\t\tFINANCIAL RATIOS"],tablefmt="simple"))  
+    console_print(tabulate(table, years,tablefmt="grid"))
         
 
 '''Fetch div data and consolidate'''
@@ -322,7 +323,7 @@ def save_to_disk(TYPE, data, c_name):
 
 '''Load cached data from disk'''
 ''' TYPE = ('DIV', 'RATIOS', 'CORP-ACTIONS') '''
-''' Returns none for data older than 300 seconds (5 minutes) '''
+''' Returns none for data older than 604800 seconds (7 days) '''
 def Load_from_disk(TYPE, c_name):
     if TYPE not in  ('DIV', 'RATIOS', 'CORP-ACTIONS'):
       print "invalid TYPE, cannot cache!!"
@@ -341,26 +342,36 @@ def Load_from_disk(TYPE, c_name):
     else:
       return None
 
-    if (time_now - time_stamp).total_seconds() > 300:
+    if (time_now - time_stamp).total_seconds() > 604800:
        return None       
 
     return cache[TYPE][1]
 
 '''list all corp actions either sorted by ACTION_TYPE or by DATE'''
 def list_all_corp_actions(comp_name, order_by='DATE'):
-
+    table = []
     actions = fetch_corp_actions(comp_name.lower())
 
     for item in actions:
-        record = '%12s  %12s  %12s' %(str(item['date']), str(item['event_type']) , str(item['value']))
-        print record
+        if item['event_type'] == 'DIVIDEND':
+            item['value'] = str(item['value']) + "%"
+        if item['event_type'] == 'BONUS':
+            item['value'] = "x " + str(item['value'])
+        if item['event_type'] == 'SPLIT':
+            item['value'] = "x " + str(item['value'])
 
-        
-        
-
+        table.append([item['date'], item['event_type'], item['value']])
+    
+    console_print(tabulate("",["\n\n\t\t\tCORPORATE ACTIONS"]))
+    console_print(tabulate(table, ['DATE', 'ACTION', 'VALUE' ], tablefmt="grid"))
 
 def main():
   name = ''  
+  global PRINT 
+  
+  if ('--verbose' in sys.argv) or ('-v' in sys.argv):
+     PRINT = True
+  
   if len(sys.argv) > 1:
      if '--name' in sys.argv:
         index = sys.argv.index('--name')
@@ -374,10 +385,10 @@ def main():
      report = collect_ratios(name.lower())
      print_annual_ratios(report)
      
-     #actions = fetch_corp_actions(name.lower())
+     actions = fetch_corp_actions(name.lower())
      #print actions
-     #list_all_corp_actions(name.lower())
-
+     list_all_corp_actions(name.lower())
+   
 
 if __name__ == "__main__" :
   main()
