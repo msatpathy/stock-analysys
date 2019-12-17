@@ -8,6 +8,7 @@ from urlstore import urldata
 import copy
 import pickle
 from datetime import datetime
+from tabulate import tabulate
 
 DATA_DIR = "DataLib/"
 
@@ -68,6 +69,36 @@ def get_bonus_history(name):
             bonus_records.append(d)
             values = []
     return bonus_records
+
+'''Fetch split data from the web(moneycontrol)'''
+def get_split_history(name):
+    split_records = []
+    keys = ['announce_date', 'old_fv', 'new_fv', 'ex-split_date']
+    values = []
+    for item in urldata:
+        for n in item['name']:
+          if n == name:
+            url = item['split_history']
+            break
+        if url != "":
+           break
+
+    if url != '':
+        html = urlopen(url)
+    else:
+        print "url not found(split)!!!"
+        sys.exit()
+    
+    bs = BeautifulSoup(html.read(), features="html.parser")
+    for f in  bs.find("table", {'class':"mctable1"}).findChildren("td"):
+        values.append(f.get_text())
+        if len(values) == len(keys):
+            d = dict(zip(keys,values))
+            split_records.append(d)
+            values = []
+    return split_records
+
+
 
          
 '''consolidate div data per year basis(one entry per year)'''
@@ -165,13 +196,20 @@ def print_annual_ratios(report):
     years = report.keys()
     years.sort(reverse = True)
     years_p = [item.rjust(16,' ') for item in years ]
-    years_str = "\t"*4 + "".join(years_p)
-    print years_str
-    for k in report[years[0]].keys():
-        val = k + "\t"
+    #years_str = "\t"*4 + "".join(years_p)
+    years_p.insert(0, 'Ratios\t\t\t')
+    format_string = len(years_p)*'{:<24}'
+    print format_string.format(*years_p)
+
+    all_keys = sorted(report[years[0]].keys())
+    for k in sorted(report[years[0]].keys()):
+        val = []
+        val.append(k)
         for y in years:
-            val += str(report.get(y).get(k,'***')) + "\t\t"
-        print val
+            val.append(str(report.get(y).get(k,'***'))) 
+        val =  [str(i).rjust(24) for i in val ]
+        print format_string.format(*val)
+        
 
 '''Fetch div data and consolidate'''
 def fetch_div_record(name):
@@ -198,6 +236,12 @@ def dump_dividend_history(div_data, dump_name):
 
 '''Fetch corporate actions history (SPLIT, DIVIDEND, BONUS etc.)'''
 def fetch_corp_actions(comp_name):
+    
+    all_events = Load_from_disk('CORP-ACTIONS', comp_name)
+
+    if all_events != None:
+        return all_events
+
     all_events = []
     #event = { }    { 'event_type': '', 'date' : '' ,'value': '' }
     
@@ -209,8 +253,17 @@ def fetch_corp_actions(comp_name):
     bonus_history = get_bonus_history(comp_name)
     events = filter_corp_actions_data(bonus_history, 'BONUS')
     all_events.extend(events)
-    print all_events
+    
+    split_history = get_split_history(comp_name)
+    events = filter_corp_actions_data(split_history, 'SPLIT')
+    all_events.extend(events)
 
+    sort_key = lambda(list_item): list_item['date']
+    sorted_events = sorted(all_events,key=sort_key,reverse=True)
+
+    save_to_disk('CORP-ACTIONS', sorted_events, comp_name)
+
+    return sorted_events
 
 
 '''filter events to only relevant fields, remove the rest'''
@@ -220,26 +273,40 @@ def filter_corp_actions_data(event_list, event_type):
        for item in event_list:
           event = {}
           event['event_type'] = 'DIVIDEND'
-          event['date'] = item['effective']
-          event['value'] = item['percentage']
+          div_date = datetime.strptime(item['effective'],'%d-%m-%Y').date()
+          event['date'] = div_date
+          event['value'] = float(item['percentage'])
           filtered_list.append(event)
     
     if event_type == 'BONUS':
        for item in event_list:
           event = {}
           event['event_type'] = 'BONUS'
-          event['date'] = item['record']
-          event['value'] = item['ratio']
+          ex_bonus_date = datetime.strptime(item['record'], '%d-%m-%Y').date()
+          event['date'] = ex_bonus_date
+          vals = item['ratio'].split(':')
+          multiplier =  ( float(vals[0]) + float(vals[1]) ) / float(vals[1])
+          event['value'] = multiplier
           filtered_list.append(event)
+    
+    if event_type == 'SPLIT':
+       for item in event_list:
+          event = {}
+          event['event_type'] = 'SPLIT'
+          split_date = datetime.strptime(item['ex-split_date'],'%d-%m-%Y').date()
+          event['date'] = split_date
+          event['value'] = int(item['old_fv'])/int(item['new_fv'])
+          filtered_list.append(event)
+
     return filtered_list
 
         
 
 '''Save data to disk'''
-''' TYPE = ('DIV', 'RATIOS', 'CALENDAR') '''
+''' TYPE = ('DIV', 'RATIOS', 'CORP-ACTIONS') '''
 def save_to_disk(TYPE, data, c_name):
     cache = {}
-    if TYPE not in  ('DIV', 'RATIOS', 'CALENDAR'):
+    if TYPE not in  ('DIV', 'RATIOS', 'CORP-ACTIONS'):
       print "invalid TYPE, cannot cache!!"
       return False
   
@@ -254,10 +321,10 @@ def save_to_disk(TYPE, data, c_name):
     return True 
 
 '''Load cached data from disk'''
-''' TYPE = ('DIV', 'RATIOS', 'CALENDAR') '''
+''' TYPE = ('DIV', 'RATIOS', 'CORP-ACTIONS') '''
 ''' Returns none for data older than 300 seconds (5 minutes) '''
 def Load_from_disk(TYPE, c_name):
-    if TYPE not in  ('DIV', 'RATIOS', 'CALENDAR'):
+    if TYPE not in  ('DIV', 'RATIOS', 'CORP-ACTIONS'):
       print "invalid TYPE, cannot cache!!"
       return None
   
@@ -279,6 +346,19 @@ def Load_from_disk(TYPE, c_name):
 
     return cache[TYPE][1]
 
+'''list all corp actions either sorted by ACTION_TYPE or by DATE'''
+def list_all_corp_actions(comp_name, order_by='DATE'):
+
+    actions = fetch_corp_actions(comp_name.lower())
+
+    for item in actions:
+        record = '%12s  %12s  %12s' %(str(item['date']), str(item['event_type']) , str(item['value']))
+        print record
+
+        
+        
+
+
 def main():
   name = ''  
   if len(sys.argv) > 1:
@@ -292,9 +372,13 @@ def main():
      dump_dividend_history(dividend, name.lower())
 
      report = collect_ratios(name.lower())
-     #print_annual_ratios(report)
+     print_annual_ratios(report)
      
-     fetch_corp_actions(name.lower())
+     #actions = fetch_corp_actions(name.lower())
+     #print actions
+     #list_all_corp_actions(name.lower())
+
+
 if __name__ == "__main__" :
   main()
   
