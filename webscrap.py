@@ -24,16 +24,14 @@ def console_print(text):
 
 '''Fetch div data from the web(moneycontrol)'''
 def get_dividend_history(name):
+    url = ''
     div_records = []
     keys = ['announce', 'effective', 'type', 'percentage', 'remarks']
     values = []
     for item in urldata:
-        for n in item['name']:
-          if n == name:
-            url = item['div_history']
-            break
-        if url != "":
-           break
+        if name in item['name']:
+          url = item['div_history']
+          break
 
 
     if url != '':
@@ -54,16 +52,14 @@ def get_dividend_history(name):
 
 '''Fetch bonus data from the web(moneycontrol)'''
 def get_bonus_history(name):
+    url = ''
     bonus_records = []
     keys = ['announce_date', 'ratio', 'record', 'ex-bonus_date']
     values = []
     for item in urldata:
-        for n in item['name']:
-          if n == name:
-            url = item['bonus_history']
-            break
-        if url != "":
-           break
+      if name in item['name']:
+         url = item['bonus_history']
+         break
 
     if url != '':
         html = urlopen(url)
@@ -82,16 +78,14 @@ def get_bonus_history(name):
 
 '''Fetch split data from the web(moneycontrol)'''
 def get_split_history(name):
+    url = ""
     split_records = []
     keys = ['announce_date', 'old_fv', 'new_fv', 'ex-split_date']
     values = []
     for item in urldata:
-        for n in item['name']:
-          if n == name:
-            url = item['split_history']
-            break
-        if url != "":
-           break
+        if name in item['name']:
+          url = item['split_history']
+          break
 
     if url != '':
         html = urlopen(url)
@@ -122,15 +116,11 @@ def calculate_annual_dividend(hist_records):
 
 ''' Collect financial ratios from moneycontrol and return it in dictionary format'''
 def collect_ratios(name):
-   #import pdb
-   #pdb.set_trace()
    years = []
    ratio = {}
-   #report = {}
-   #max_count = 0
    data_index = 0
    ratio_key = ""
-
+   url = ""
    report = Load_from_disk('RATIOS', name)
    if report != None:
       return report
@@ -139,13 +129,9 @@ def collect_ratios(name):
 
 
    for item in urldata:
-        for id in item['name']:
-            if id == name:
-              url = item['ratios']
-              #print url
-              break
-        if url != '':
-          break
+      if name in item['name']:
+        url = item['ratios']
+        break
 
    if url != '':
       html = urlopen(url)
@@ -285,9 +271,9 @@ def filter_corp_actions_data(event_list, event_type):
           event['event_type'] = 'BONUS'
           ex_bonus_date = datetime.strptime(item['record'], '%d-%m-%Y').date()
           event['date'] = ex_bonus_date
-          vals = item['ratio'].split(':')
-          multiplier =  ( float(vals[0]) + float(vals[1]) ) / float(vals[1])
-          event['value'] = multiplier
+          #vals = item['ratio'].split(':')
+          #multiplier =  ( float(vals[0]) + float(vals[1]) ) / float(vals[1])
+          event['value'] = item['ratio']
           filtered_list.append(event)
     
     if event_type == 'SPLIT':
@@ -296,7 +282,8 @@ def filter_corp_actions_data(event_list, event_type):
           event['event_type'] = 'SPLIT'
           split_date = datetime.strptime(item['ex-split_date'],'%d-%m-%Y').date()
           event['date'] = split_date
-          event['value'] = int(item['old_fv'])/int(item['new_fv'])
+          #event['value'] = int(item['old_fv'])/int(item['new_fv'])
+          event['value'] = str(item['old_fv']) + "/" + str(item['new_fv']) 
           filtered_list.append(event)
 
     return filtered_list
@@ -356,9 +343,9 @@ def list_all_corp_actions(comp_name, order_by='DATE'):
         if item['event_type'] == 'DIVIDEND':
             item['value'] = str(item['value']) + "%"
         if item['event_type'] == 'BONUS':
-            item['value'] = "x " + str(item['value'])
+            item['value'] = str(item['value'])
         if item['event_type'] == 'SPLIT':
-            item['value'] = "x " + str(item['value'])
+            item['value'] = str(item['value'])
 
         table.append([item['date'], item['event_type'], item['value']])
     
