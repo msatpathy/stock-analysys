@@ -269,7 +269,17 @@ def filter_corp_actions_data(event_list, event_type):
        for item in event_list:
           event = {}
           event['event_type'] = 'BONUS'
-          ex_bonus_date = datetime.strptime(item['record'], '%d-%m-%Y').date()
+          #consider ex-bonus date in case record date has parsing error (found in itc case)
+          try:
+            ex_bonus_date = datetime.strptime(item['record'], '%d-%m-%Y').date()
+          except ValueError:
+            print "WARNING: Data parsing error for bonus date: item['record']"  
+            try:
+              ex_bonus_date = datetime.strptime(item['ex-bonus_date'], '%d-%m-%Y').date()
+            except ValueError:
+              print "WARNING: Considering announce date due to missing ex-bonus date. Calculation result could be incorrect!!"   
+              ex_bonus_date = datetime.strptime(item['announce_date'], '%d-%m-%Y').date()
+
           event['date'] = ex_bonus_date
           #vals = item['ratio'].split(':')
           #multiplier =  ( float(vals[0]) + float(vals[1]) ) / float(vals[1])
